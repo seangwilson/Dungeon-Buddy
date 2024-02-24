@@ -27,6 +27,13 @@ module.exports = {
         )
         .addStringOption((option) =>
             option
+                .setName("time_completion")
+                .setDescription("Time/Completion")
+                .setRequired(true)
+                .addChoices({ name: "time", value: "time" }, { name: "completion", value: "completion" })
+        )
+        .addStringOption((option) =>
+            option
                 .setName("listed_as")
                 .setDescription("Specify a listed as name for your dungeon. Otherwise one will be generated for you.")
                 .setRequired(false)
@@ -42,6 +49,9 @@ module.exports = {
 
         const dungeonToRun = interaction.options.getString("dungeon");
         mainObject.embedData.dungeonName = dungeonToRun;
+
+        const timeOrCompletion = interaction.options.getString("time_completion");
+        mainObject.embedData.timeOrCompletion = timeOrCompletion;
 
         // Set the listed as group name/creator notes if the user specified one
         const listedAs = interaction.options.getString("listed_as");
@@ -86,21 +96,6 @@ module.exports = {
             return difficultyRow;
         }
 
-        function getTimeCompletionRow(timeCompletionPlaceholder) {
-            const getTimeCompletion = new StringSelectMenuBuilder()
-                .setCustomId("timeCompletion")
-                .setPlaceholder(timeCompletionPlaceholder)
-                .setMinValues(1)
-                .setMaxValues(1)
-                .addOptions(
-                    new StringSelectMenuOptionBuilder().setLabel("Time").setValue("Time"),
-                    new StringSelectMenuOptionBuilder().setLabel("Completion").setValue("Completion")
-                );
-
-            const timeCompletionRow = new ActionRowBuilder().addComponents(getTimeCompletion);
-            return timeCompletionRow;
-        }
-
         function getSelectUserRoleRow(userRolePlaceholder) {
             const getSelectUserRow = new StringSelectMenuBuilder()
                 .setCustomId("userRole")
@@ -133,6 +128,21 @@ module.exports = {
             return eligibleCompositionRow;
         }
 
+        function getGroupRequirementsRow(groupRequirementsPlaceholder) {
+            const getGroupRequirements = new StringSelectMenuBuilder()
+                .setCustomId("groupRequirements")
+                .setPlaceholder(groupRequirementsPlaceholder)
+                .setMaxValues(3)
+                .addOptions(
+                    new StringSelectMenuOptionBuilder().setLabel("BL").setValue("BL"),
+                    new StringSelectMenuOptionBuilder().setLabel("CR").setValue("CR"),
+                    new StringSelectMenuOptionBuilder().setLabel("Dispel").setValue("Disp")
+                );
+
+            const groupRequirementsRow = new ActionRowBuilder().addComponents(getGroupRequirements);
+            return groupRequirementsRow;
+        }
+
         function getConfirmCancelRow() {
             const confirmSuccess = new ButtonBuilder().setLabel("Create Group").setCustomId("confirm").setStyle(3);
             const confirmCancel = new ButtonBuilder().setLabel("Cancel").setCustomId("cancel").setStyle(4);
@@ -143,67 +153,75 @@ module.exports = {
 
         function getRows(
             difficultyPlaceholder,
-            timeCompletionPlaceholder,
             selectUserPlaceholder,
-            teamCompositionPlaceholder
+            teamCompositionPlaceholder,
+            groupRequirementsPlaceholder
         ) {
             const difficultyRow = getSelectDifficultyRow(difficultyPlaceholder);
-            const timeCompletionRow = getTimeCompletionRow(timeCompletionPlaceholder);
             const userRoleRow = getSelectUserRoleRow(selectUserPlaceholder);
             const eligibleCompositionRow = getEligibleCompositionRow(teamCompositionPlaceholder);
+            const groupRequirementsRow = getGroupRequirementsRow(groupRequirementsPlaceholder);
             const confirmCancelRow = getConfirmCancelRow();
 
-            return [difficultyRow, timeCompletionRow, userRoleRow, eligibleCompositionRow, confirmCancelRow];
+            return [difficultyRow, userRoleRow, eligibleCompositionRow, groupRequirementsRow, confirmCancelRow];
         }
 
         // Temporary storage for dropdown values
         let dungeonDifficultyPlaceholder = "Select a difficulty";
-        let timeOrCompletionPlaceholder = "Time/Completion?";
         let userChosenRolePlaceholder = "Select your role";
         let dungeonCompositionPlaceholder = "Select your composition";
+        let groupRequirementsPlaceholder = "BL, CR, Dispel etc";
 
         async function updateRows(
             i,
             msgContent,
             dungeonDifficulty,
-            timeOrCompletion,
             userChosenRole,
-            dungeonComposition
+            dungeonComposition,
+            groupRequirements
         ) {
-            const [difficultyRow, timeCompletionRow, userRoleRow, eligibleCompositionRow, confirmCancelRow] = getRows(
-                dungeonDifficulty || dungeonDifficultyPlaceholder,
-                timeOrCompletion || timeOrCompletionPlaceholder,
-                userChosenRole || userChosenRolePlaceholder,
-                dungeonComposition || dungeonCompositionPlaceholder
-            );
+            const [difficultyRow, userRoleRow, eligibleCompositionRow, groupRequirementsRow, confirmCancelRow] =
+                getRows(
+                    dungeonDifficulty || dungeonDifficultyPlaceholder,
+                    userChosenRole || userChosenRolePlaceholder,
+                    dungeonComposition || dungeonCompositionPlaceholder,
+                    groupRequirements || groupRequirementsPlaceholder
+                );
 
             await i.update({
                 content: msgContent,
                 ephemeral: true,
-                components: [difficultyRow, timeCompletionRow, userRoleRow, eligibleCompositionRow, confirmCancelRow],
+                components: [
+                    difficultyRow,
+                    userRoleRow,
+                    eligibleCompositionRow,
+                    groupRequirementsRow,
+                    confirmCancelRow,
+                ],
             });
         }
 
         const userFilter = (i) => i.user.id === interaction.user.id;
 
         try {
-            const [difficultyRow, timeCompletionRow, userRoleRow, eligibleCompositionRow, confirmCancelRow] = getRows(
+            const [difficultyRow, userRoleRow, eligibleCompositionRow, groupChangesRow, confirmCancelRow] = getRows(
                 dungeonDifficultyPlaceholder,
-                timeOrCompletionPlaceholder,
                 userChosenRolePlaceholder,
-                dungeonCompositionPlaceholder
+                dungeonCompositionPlaceholder,
+                groupRequirementsPlaceholder
             );
 
             let messageContent = `You are creating a group for ${dungeonToRun}.`;
             const dungeonResponse = await interaction.reply({
                 content: messageContent,
                 ephemeral: true,
-                components: [difficultyRow, timeCompletionRow, userRoleRow, eligibleCompositionRow, confirmCancelRow],
+                components: [difficultyRow, userRoleRow, eligibleCompositionRow, groupChangesRow, confirmCancelRow],
             });
 
             // Temporary storage for dungeon/group values
             let dungeonDifficulty = null;
-            let timeOrCompletion = null;
+            let groupRequirements = null;
+            let groupRequirementList = null;
             let userChosenRole = null;
             let dungeonComposition = null;
             let dungeonCompositionList = null;
@@ -220,9 +238,10 @@ module.exports = {
                     mainObject.embedData.dungeonDifficulty = dungeonDifficulty;
 
                     await i.deferUpdate();
-                } else if (i.customId === "timeCompletion") {
-                    timeOrCompletion = i.values[0];
-                    mainObject.embedData.timeOrCompletion = timeOrCompletion;
+                } else if (i.customId === "groupRequirements") {
+                    groupRequirementList = i.values;
+                    groupRequirements = groupRequirementList.join(", ");
+                    mainObject.embedData.groupRequirements = groupRequirementList;
 
                     await i.deferUpdate();
                 } else if (i.customId === "userRole") {
@@ -242,9 +261,9 @@ module.exports = {
                         i,
                         messageContent,
                         dungeonDifficulty,
-                        timeOrCompletion,
                         userChosenRole,
-                        dungeonComposition
+                        dungeonComposition,
+                        groupRequirements
                     );
                 } else if (i.customId === "composition") {
                     await i.deferUpdate();
@@ -263,22 +282,20 @@ module.exports = {
                     let messageContentMissing = messageContent;
                     if (!dungeonDifficulty) {
                         messageContentMissing += "\n**Please select a difficulty.**";
-                    } else if (!timeOrCompletion) {
-                        messageContentMissing += "\n**Please select time/completion.**";
                     } else if (!userChosenRole) {
                         messageContentMissing += "\n**Please select your role.**";
                     } else if (!dungeonComposition) {
                         messageContentMissing += "\n**Please select required roles.**";
                     }
 
-                    if (!dungeonDifficulty || !timeOrCompletion || !userChosenRole || !dungeonComposition) {
+                    if (!dungeonDifficulty || !userChosenRole || !dungeonComposition) {
                         await updateRows(
                             i,
                             messageContentMissing,
                             dungeonDifficulty,
-                            timeOrCompletion,
                             userChosenRole,
-                            dungeonComposition
+                            dungeonComposition,
+                            groupRequirements
                         );
                     } else {
                         // Add the user to the main object
